@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: practice3 template for ELB
+
+Parameters:
+  VPCStack:
+    Type: String
+    Default: practice3-vpc
+  EC2Stack:
+    Type: String
+    Default: practice3-ec2
+
+Resources:
+  FrontLBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-tg
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: /wp-includes/images/blank.gif
+      Targets:
+        - Id:
+            Fn::ImportValue: !Sub ${EC2Stack}-EC2WebServer01
+        - Id:
+            Fn::ImportValue: !Sub ${EC2Stack}-EC2WebServer02
+
+  SecurityGroupLB:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: !Ref AWS::StackName
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  FrontLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref AWS::StackName
+      Subnets:
+        - Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet1
+        - Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet2
+      SecurityGroups: 
+        - !Ref SecurityGroupLB
+
+  FrontLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref FrontLB
+      Port: 80
+      Protocol: HTTP 
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref FrontLBTargetGroup
+
+Outputs:
+  FrontLBEndpoint:
+    Value: !GetAtt FrontLB.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-Endpoint
+

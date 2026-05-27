@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: practice3 template for RDS
+
+Parameters:
+  VPCStack:
+    Type: String
+    Default: practice3-vpc
+  DBUser:
+    Type: String
+    Default: admin
+  DBPassword:
+    Type: String
+    Default: funa0123
+    NoEcho: true
+
+Resources:
+  DBSubnetGroup: 
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupDescription: DB Subnet Group for Private Subnet
+      SubnetIds: 
+        - Fn::ImportValue: !Sub ${VPCStack}-PrivateSubnet1
+        - Fn::ImportValue: !Sub ${VPCStack}-PrivateSubnet2
+        #↑のこの記述によって、practice3-vpc-PrivateSubnet1
+        #このような記述に置き換えられる。その後importValueに
+        #この記述が引き渡される。
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: !Sub ${AWS::StackName}-MariaDB
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/16
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      MultiAZ: true
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "10"
+      StorageType: gp2
+      Engine: mariadb
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBName: wordpress
+      BackupRetentionPeriod: 1
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+
+Outputs:
+  DBEndpoint:
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-DBEndpoint

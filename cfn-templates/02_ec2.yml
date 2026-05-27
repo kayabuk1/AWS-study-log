@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: 2010-09-09
+#↑Cloudformation現場監督に、「この設計図は2010年9月9日版の
+#ルールで書かれています」と宣言する。
+#Q.おまじないだけれど、必須項目？なのはなぜ？
+#Q.ルールとは何に関するルール？HTMLのバージョンの様なもの？
+Description: practice3 template for EC2
+#この設計図が「何を作るものなのか」を人間（後任のエンジニアや
+#自分自身）に向けてメモしておくための説明文
+#（Description）セクション。
+
+Parameters: 
+#parameteresセクションは、
+#スタックを作成すると時に、外から値を取って来る時に使う設定項目
+  VPCStack:
+  #このリソースを参照する時にしやすい様に、
+  #VPCStackという名前の受付窓口（変数）を用意しますという宣言。
+    Type: String
+    Default: practice3-vpc
+    #この変数VPCStackには、文字列（String）が入りますと型を指定。
+    #もしコマンド実行時に何も指定されなかった場合の デフォルト値
+    #（Default）として practice3-vpc をセットしています。
+    #これがあるおかげで、いちいちコマンドでパラメータを指定しなくても
+    #スッと通っていたのです。
+    #Q.どんなふうにコマンドでVPCstackを指定していたっけ？
+  EC2AMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/|
+      al2023-ami-kernel-6.1-x86_64
+    #OSのイメージID（AMI）を直接書く（ハードコードする）のではなく、
+    #AWSの「Systems Manager (SSM) パラメータストア」という場所から、
+    #「Amazon Linux 2023の常に最新バージョンのID」を動的に
+    #取り寄せるという高度な型指定（Type）。
+    #これにより、数ヶ月後にこのYAMLを実行しても、自動的にその時の
+    #最新OSが選ばれるようになります。
+    #Q.ここの構文についてもう少し詳しく解説して欲しい。
+
+Resources:
+#Resources セクションは、設計図の中で唯一**
+#「絶対に書かなければならない必須セクション」**です
+#実際にAWS上に構築する部品をここに全て書きます。
+  EC2WebServer01:
+  #「EC2WebServer01」という名前でスタック＝今回はEC2インスタンス？
+  #を作ります、という宣言。
+  #これを論理IDと呼びます。cloudformaiton現場監督はこの名前を
+  #「設計図の中での仮の名前」として扱います。
+  #Q.なぜID＝みたいに代入していないのに、論理IDとして扱われる？
+    Type: AWS::EC2::Instance
+    #作るスタックの種類（型）を宣言？
+    #「AWSの、EC2というサービスの、Instance（仮想サーバー）を作れ」
+    #という指示です。
+    #::は階層を表す。AWSカテゴリー？のEC2カテゴリー？のインスタンス型を
+    #作れと指示。
+    Properties:
+    #Properties はその部品の詳細設定です。OSイメージには、
+    #さきほどParametersで用意した窓口の値を**「!Ref
+    #（参照して持ってきてね）」**と指示しています
+    #インスタンスのサイズは無料枠の t2.micro を直書きしています。
+      ImageId: !Ref EC2AMI
+      InstanceType: t2.micro
+      SubnetId:
+        Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet1
+      SecurityGroupIds: 
+      - !Ref WebServerSG
+      UserData: !Base64 |
+        #!/bin/bash
+        # パッケージ情報の最新化
+        dnf -y update
+        # WordPressの実行に必要なパッケージのインストール
+        # PHP, Apache（Webサーバ）, MariaDB（データベース）クライアント
+        dnf -y install php php-mysqli httpd mariadb1011
+        # WordPressのtarボール（アーカイブファイル）をダウンロード
+        wget http://ja.wordpress.org/latest-ja.tar.gz -P /tmp/
+        # WordPressのソースコードをtarボールから展開
+        tar zxvf /tmp/latest-ja.tar.gz -C /tmp
+        # WordPressのソースコードをApacheの公開ディレクトリへコピー
+        cp -r /tmp/wordpress/* /var/www/html/
+        # WordPressのソースコードの所有者／グループをApache実効ユーザに変更
+        chown apache:apache -R /var/www/html
+        # Aoacheサービスの自動起動を有効化
+        systemctl enable httpd.service
+        # Apacheサービスの起動
+        systemctl start httpd.service
+
+  EC2WebServer02:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref EC2AMI
+      InstanceType: t2.micro
+      SubnetId: 
+        Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet2
+      SecurityGroupIds: 
+      - !Ref WebServerSG
+      UserData: !Base64 |
+        #!/bin/bash
+        # パッケージ情報の最新化
+        dnf -y update
+        # WordPressの実行に必要なパッケージのインストール
+        # PHP, Apache（Webサーバ）, MariaDB（データベース）クライアント
+        dnf -y install php php-mysqli httpd mariadb1011
+        # WordPressのtarボール（アーカイブファイル）をダウンロード
+        wget http://ja.wordpress.org/latest-ja.tar.gz -P /tmp/
+        # WordPressのソースコードをtarボールから展開
+        tar zxvf /tmp/latest-ja.tar.gz -C /tmp
+        # WordPressのソースコードをApacheの公開ディレクトリへコピー
+        cp -r /tmp/wordpress/* /var/www/html/
+        # WordPressのソースコードの所有者／グループをApache実効ユーザに変更
+        chown apache:apache -R /var/www/html
+        # Aoacheサービスの自動起動を有効化
+        systemctl enable httpd.service
+        # Apacheサービスの起動
+        systemctl start httpd.service
+
+  WebServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Web Server
+      GroupName: WebServerSGString
+      SecurityGroupIngress: 
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0 
+        FromPort: 80
+        ToPort: 80
+      - IpProtocol: tcp
+        CidrIp: 0.0.0.0/0 
+        FromPort: 22
+        ToPort: 22
+      VpcId: 
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+
+Outputs:
+  EC2WebServer01:
+    Value: !Ref EC2WebServer01
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2WebServer01
+  EC2WebServer02:
+    Value: !Ref EC2WebServer02
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2WebServer02
